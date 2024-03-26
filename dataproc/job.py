@@ -1,16 +1,20 @@
-from typing import Callable, List
+from typing import Callable, List, Union
 from dataproc.application import Application
 from pyspark.sql import SparkSession
 
+from dataproc.dataflow import DataFlow, DataFlowBatch, DataFlowStream
+
 
 class Job:
-    def __init__(self, name, test=False):
+    def __init__(self, name, test=False, stream=True):
         print("in Job __init__")
         self.app = None
         self.name = name
         self.stream_writers: List[Callable] = []
+        self.flows: Union[List[DataFlowBatch], List[DataFlowStream]] = []
         self.test = test
-        self.spark = None
+        self.stream = stream
+        self.spark: SparkSession = None
 
     def __log(self, msg):
         print(f'[Log] {msg}')
@@ -31,9 +35,19 @@ class Job:
         self.__log("Starting job")
 
         if not self.test:
-            self.__log(f"Executing {len(self.stream_writers)} streams")
-            for sw in self.stream_writers:
-                sw()
+            if self.stream_writers:
+                self.__log(f"Executing {len(self.stream_writers)} streams")
+                for sw in self.stream_writers:
+                    sw()
+
+            if self.flows:
+                self.__log(f"Executing {len(self.flows)} data flows")
+                for flow in self.flows:
+                    if self.stream:
+                        self.execute_data_flow_stream(flow)
+                    else:
+                        self.execute_data_flow_batch(flow)
+
 
     def read(self):
         self.__log("getting read option from spark")
@@ -45,3 +59,30 @@ class Job:
 
     def register_stream_writer(self, writer: Callable):
         self.stream_writers.append(writer)
+
+    def register_data_flow(self, flow: DataFlow):
+        self.flows.append(flow)
+
+    def execute_data_flow_batch(self, flow: DataFlowBatch):
+        reader = flow.read(self.spark.read)
+
+        df = reader.load(flow.input_path)
+
+        df = flow.transform(df)
+
+        writer = flow.write(df.write)
+
+        self.__log("writing batch")
+        writer.save()
+
+    def execute_data_flow_stream(self, flow: DataFlowStream):
+        reader = flow.read(self.spark.readStream)
+
+        df = reader.load(flow.input_path)
+
+        df = flow.transform(df)
+
+        writer = flow.write(df.writeStream)
+
+        self.__log("starting stream")
+        return writer.start()

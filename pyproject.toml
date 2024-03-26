@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "data-proc-stream"
+name = "dataproc"
 version = "0.1.0"
 description = ""
 authors = ["Kevin Nacios <kevin.nacios@gmail.com>"]

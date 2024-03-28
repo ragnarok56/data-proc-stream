@@ -3,7 +3,7 @@ from dataproc.application import Application
 from pyspark.sql import SparkSession
 
 from dataproc.dataflow import DataFlow, DataFlowBatch, DataFlowStream
-
+from dataproc.listener.streaming import StreamingListener
 
 class Job:
     def __init__(self, name, test=False, stream=True):
@@ -26,7 +26,22 @@ class Job:
         self.app = Application()
 
     def init_spark(self):
-        self.spark = SparkSession.builder.master('local').getOrCreate()
+        path = '/Users/kevinnacios/Projects/github/ragnarok56/data-proc-stream/scala/dataproc/target/scala-2.13/dataproc_2.13-0.1.0-SNAPSHOT.jar'
+        spark: SparkSession = (SparkSession
+            .builder
+            .master('local')
+            .config('spark.sql.streaming.schemaInference', 'true')
+            # .config('spark.jars.packages', 'net.nacios.spark:dataproc_2.13:0.1.0-SNAPSHOT')
+            .config('spark.jars', path)
+            .config('spark.driver.extraClassPath', path)
+            .config('spark.executor.extraClassPath', path)
+            .config('spark.sql.queryExecutionListeners', 'net.nacios.spark.listener.CustomQueryExecutionListener')
+            .getOrCreate()
+        )
+        print(spark.sparkContext._jsc.sc().listJars())
+        spark.streams.addListener(StreamingListener())
+
+        self.spark = spark
 
     def start(self):
         if self.app == None:
@@ -47,6 +62,9 @@ class Job:
                         self.execute_data_flow_stream(flow)
                     else:
                         self.execute_data_flow_batch(flow)
+
+        if self.stream:
+            self.spark.streams.awaitAnyTermination()
 
 
     def read(self):

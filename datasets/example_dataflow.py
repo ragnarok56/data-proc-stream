@@ -1,6 +1,7 @@
 from dataproc.dataflow import R, W, DataFlow
 from dataproc.job import Job
 from pyspark.sql import DataFrame
+from pyspark.sql.streaming.readwriter import DataStreamWriter
 
 dataset_paths = [
     ('stream1', 'data/dataset1'),
@@ -10,11 +11,19 @@ dataset_paths = [
 class ExampleDataFlow(DataFlow[R, W]):
     def read(self, reader: R):
         print("defining reader")
-        return reader.format('csv')
+        return (reader
+            .format('csv')
+            .option("inferSchema", "true")
+            .option("header", "true")
+        )
 
     def write(self, writer: W):
         print("defining writer")
-        return writer.format('noop').mode('append')
+        if isinstance(writer, DataStreamWriter):
+            return writer.format('noop').outputMode('append')
+        else:
+            return writer.format('noop').mode('append')
+
 
     def transform(self, df: DataFrame):
         print("doing transform stuff")
